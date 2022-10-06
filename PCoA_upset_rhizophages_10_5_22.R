@@ -1,4 +1,4 @@
-setwd("~/Dropbox/UCDavis/Brandon/")
+setwd("C:/Users/Brandon Matsumoto/Documents/GitHub/ChickpeaGang/")
 
 library(ape)
 library(tidyverse)
@@ -18,7 +18,7 @@ library(ggplot2)
 
 #Load vOTU coverage table info and reformat
 
-otu <- read.csv("vOTUs_confirmed_us_min10k_coverm_output_nosym.csv", header=T, stringsAsFactors = F, ) # load the table
+otu <- read.csv("combinedcoverm_w_paki_10_5_22.csv", header=T, stringsAsFactors = F, ) # load the table
 otu <- otu %>%
   column_to_rownames("Contig") 
 otu <- otu[rowSums(otu)> 0, ] # throw out rows (viruses) that don't appear in any sample
@@ -55,6 +55,16 @@ otu_t_valid <- otu_t %>%
   filter(!is.na(Run)) %>%
   column_to_rownames("Run")
 
+#bar chart updated
+#srr_filtered <- rownames(otu_t_valid) #pulling row names from out_t_valid
+#srrdf <- as.data.frame(srr_filtered) #outputting rownames as dataframe to manipulate
+#colnames(srrdf) <- c("Run")
+#srr_smn <- merge(srrdf, sra_run_table,by="Run") #merged srrs that we have with their respective samn names
+#srr_smn_geo <- merge(srr_smn, iso_to_loc, by="BioSample")
+#bar_chart_data <- select(srr_smn_geo, c("Run.x","BioSample","isolation_source"))
+
+
+
 # Create the distance matrix using the Jaccard algorithm (just presence/absence, not caring how high the coverage is)
 pco_dist <- vegdist(otu_t_valid[, which(colnames(otu_t_valid) %like% "NZ")], method="jaccard")
 
@@ -81,7 +91,9 @@ pcoa_A <- ggplot(pcoa_bray_df) + # Plot the PCoA
   ggtitle('vOTU clustering by country') +
   coord_fixed(ratio = 1) +
   theme_bw() + scale_color_brewer(12, palette="Paired", direction=-1)
-ggsave(pcoa_A, "Rhizophages_PCoA_Co1_Co2.pdf")
+  #print(ggplot(pcoa_A))######
+#plot(pcoa_A)
+ggsave("Rhizophages_PCoA_Co1_Co2.pdf")
 
 # Plotting coordinates 2 and 3
 pcoa_B <- ggplot(pcoa_bray_df) + # Plot the PCoA
@@ -91,7 +103,8 @@ pcoa_B <- ggplot(pcoa_bray_df) + # Plot the PCoA
   ggtitle('vOTU clustering by country') +
   coord_fixed(ratio = 1) +
   theme_bw() + scale_color_brewer(12, palette="Paired", direction=-1)
-ggsave(pcoa_B, "Rhizophages_PCoA_Co2_Co3.pdf")
+#ggsave(pcoa_B, "Rhizophages_PCoA_Co2_Co3.pdf")
+ggsave("Rhizophages_PCoA_Co2_Co3.pdf")
 
 # CAP analysis - by country of origin
 iso_to_loc_2 <- iso_to_loc  %>%
@@ -158,7 +171,7 @@ pcoa_C <- ggplot(pcoa_bray_df) + # Plot the PCoA
   ggtitle('vOTU clustering by strain') +
   coord_fixed(ratio = 1) +
   theme_bw() + scale_color_manual(values=c(brewer.pal(n=8, "Reds")[-1], brewer.pal(n=7, "YlOrRd")[-1], brewer.pal(n=6, "Greens")[-1], rev(brewer.pal(n=4, "Purples")[-1]), rev(brewer.pal(n=4, "Blues")[-1]), "black"))
-ggsave(pcoa_C, "Rhizophages_PCoA_by_strain_Co1_Co2.pdf")
+ggsave("Rhizophages_PCoA_by_strain_Co1_Co2.pdf")
 
 pcoa_D <- ggplot(pcoa_bray_df) + # Plot the PCoA
   geom_point(aes(x = Axis.2, y = Axis.3, color=ANI95.OTU), size = 1) +
@@ -167,7 +180,7 @@ pcoa_D <- ggplot(pcoa_bray_df) + # Plot the PCoA
   ggtitle('vOTU clustering by strain') +
   coord_fixed(ratio = 1) +
   theme_bw() + scale_color_manual(values=c(brewer.pal(n=8, "Reds")[-1], brewer.pal(n=7, "YlOrRd")[-1], brewer.pal(n=6, "Greens")[-1], rev(brewer.pal(n=4, "Purples")[-1]), rev(brewer.pal(n=4, "Blues")[-1]), "black"))
-ggsave(pcoa_D, "Rhizophages_PCoA_by_strain_Co2_Co3.pdf")
+ggsave("Rhizophages_PCoA_by_strain_Co2_Co3.pdf")
 
 ggarrange(pcoa_A, pcoa_B, pcoa_C, pcoa_D, ncol = 2, nrow = 2, labels=c("A", "B", "C", "D"), widths=c(1,1), heights=c(1,1))
 
@@ -535,8 +548,11 @@ shared_votu_new <- shared_votu
 colnames(shared_votu_new) <- shared_votu[1,]
 shared_votu_new
 
+#bar chart updated
+srr <- out_t_valid[]
+
 #bar chart for ubiquotus votu
-srr <- read.csv("C:/Users/Brandon Matsumoto/Documents/Emerson/geographforviral50up/samnsrrgeowehave.csv")
+srr <- read.csv("samnsrrgeowehave.csv") #need to change
 all_data <- read.csv("pnas.1900056116.sd01.csv")
 srr_samn_merge <- merge(shared_votu_new,srr, by="SRR")
 all_merge <- merge(srr_samn_merge, all_data, by="SAMN")
