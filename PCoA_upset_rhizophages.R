@@ -21,15 +21,16 @@ otu <- otu[rowSums(otu)> 0, ] # throw out rows (viruses) that don't appear in an
 # Count vOTUs per sample
 temp <- otu %>%
   mutate(across(.cols = everything(), ~ case_when(.x > 0 ~ 1, TRUE ~ 0)))
-max(colSums(temp)) #16
-which(colSums(temp) == 1)
+max(colSums(temp)) #Max number of vOTUs per sample: 16
+#which(colSums(temp) == 1)
 
-otu_t <- otu %>% # Throw out samples (columns) that have no viruses
+otu_t <- otu %>% 
   t() %>% #transpose the table
   data.frame # turn it back from matrix to data frame
-
+  
 otu_t[otu_t > 0] <- 1 # Convert to presence/absence
-otu_t <- otu_t[rowSums(otu_t)> 2, ] # Remove communities with 2 or less viruses, this get rid of 81% of samples
+otu_t <- otu_t[rowSums(otu_t) > 0,] # Throw out samples (columns) that have no viruses, 587 samples remain
+otu_t_2 <- otu_t[rowSums(otu_t)> 2, ] # Remove communities with 2 or less viruses, 158 samples remain
 
 # Load SRA table and Greenlon sup. table 1
 sra_run_table <- read.csv("SraRunTable.txt", header=T, stringsAsFactors = F) %>%
@@ -58,14 +59,18 @@ iso_to_loc[iso_to_loc$sample_title %like% "P6.*", "Country.of.origin"] <- "PK"
 iso_to_loc[iso_to_loc$sample_title %like% "P6.*", "organism"] <- "Mesorhizobium"
 iso_to_loc[(nrow(iso_to_loc)-11):nrow(iso_to_loc), "Run"] <- iso_to_loc[(nrow(iso_to_loc)-11):nrow(iso_to_loc), "sample_title"]
 
-# Filter the vOTU table to sample that have a country assigned
-otu_t_valid <- otu_t %>%
+# Filter the vOTU table to sample that have a country assigned, leaves 156/158
+otu_t_valid <- otu_t_2 %>%
   rownames_to_column(var="Run") %>%
   left_join(iso_to_loc, by="Run") %>%
   filter(Country.of.origin != "") %>% # Throwing out samples without strain specified
   filter(!is.na(Country.of.origin)) %>%
   filter(!is.na(Run)) %>%
   column_to_rownames("Run")
+
+# How many are from nodules (plant metagenomes) vs. Mesorhizobium isolates?
+nrow(otu_t_valid[otu_t_valid$organism == "plant metagenome",]) # 114
+nrow(otu_t_valid[otu_t_valid$organism != "plant metagenome",]) # 42
 
 # Create the distance matrix using the Jaccard algorithm (just presence/absence, not caring how high the coverage is)
 # the reason we're using a Jaccard matrix is that the matrix is mostly 0's which can heavily bias other metrics
@@ -132,7 +137,7 @@ ggsave("new_figs/CAP_analysis_by_country_min2.pdf")
 # Coloring the PCoA by Mesorhizobium strain
 
 # Filter the vOTU table to sample that have a strain assigned
-otu_t_valid <- otu_t %>%
+otu_t_valid <- otu_t_2 %>%
   rownames_to_column(var="Run") %>%
   left_join(iso_to_loc, by="Run") %>%
   filter(ANI95.OTU != "") %>% # Throwing out samples without strain specified
@@ -158,11 +163,14 @@ pcoa_bray_df <- data.frame(pcoa_bray$vectors) %>% # creating a data frame of the
   left_join(iso_to_loc, by="BioSample") %>% # Merging with the Greenlon sup. table 1 by BioSample
   filter(ANI95.OTU != "") %>% # Throwing out samples without country of origin specified
   filter(!is.na(ANI95.OTU)) %>%
-  mutate(ANI95.OTU = fct_relevel(ANI95.OTU, c("1A", "1B", "1C", "1D", "1E", "1G", 
-                                   "2A", "2B", "2C", "2E", "3A", "4A", "4B", 
-                                   "5A", "5B", "5C", "5D", "5E", "6A", 
-                                   "7A", "7B", "7D", 
-                                   "8A", "8B", "9A", "10A")))
+  mutate(ANI95.OTU = fct_relevel(ANI95.OTU, c("1A", "2A", "4A", "4B", 
+                                              "5A", "5B", "5C",  
+                                              "6A", "7A", "8A", "9A")))
+  # mutate(ANI95.OTU = fct_relevel(ANI95.OTU, c("1A", "1B", "1C", "1D", "1E", "1G", 
+  #                                  "2A", "2B", "2C", "2E", "3A", "4A", "4B", 
+  #                                  "5A", "5B", "5C", "5D", "5E", "6A", 
+  #                                  "7A", "7B", "7D", 
+  #                                  "8A", "8B", "9A", "10A")))
 
 eigenvalues<-round(jac_variances[,2], digits = 4)*100 # Rounding the variance explained by each PCoA axis to 2 decimals
 pcoa_C <- ggplot(pcoa_bray_df) + # Plot the PCoA
@@ -171,8 +179,7 @@ pcoa_C <- ggplot(pcoa_bray_df) + # Plot the PCoA
   xlab(paste0('Co 1 ',eigenvalues[1],'%')) + #Extract x axis value from variance
   ggtitle('vOTU clustering by strain') +
   coord_fixed(ratio = 1) +
-  theme_bw() + scale_color_brewer(palette="Spectral")
-  #theme_bw() + scale_color_manual(values=c(brewer.pal(n=9, "Reds")[-1], brewer.pal(n=7, "YlOrRd")[-1], brewer.pal(n=6, "Greens")[-1], rev(brewer.pal(n=4, "Purples")[-1]), rev(brewer.pal(n=4, "Blues")[-1]), "black"))
+  theme_bw() + scale_color_manual(values=c(brewer.pal(n=5, "Reds")[-1], brewer.pal(n=4, "Greens")[-1], rev(brewer.pal(n=5, "Blues")[-1])))
 ggsave("new_figs/Rhizophages_PCoA_by_strain_Co1_Co2_min2.pdf", pcoa_C)
 
 pcoa_D <- ggplot(pcoa_bray_df) + # Plot the PCoA
@@ -181,7 +188,7 @@ pcoa_D <- ggplot(pcoa_bray_df) + # Plot the PCoA
   xlab(paste0('Co 2 ',eigenvalues[2],'%')) + #Extract x axis value from variance
   ggtitle('vOTU clustering by strain') +
   coord_fixed(ratio = 1) +
-  theme_bw() + scale_color_brewer(palette="Spectral")
+  theme_bw() + scale_color_manual(values=c(brewer.pal(n=5, "Reds")[-1], brewer.pal(n=4, "Greens")[-1], rev(brewer.pal(n=5, "Blues")[-1])))
   #theme_bw() + scale_color_manual(values=c(brewer.pal(n=9, "Reds")[-1], brewer.pal(n=7, "YlOrRd")[-1], brewer.pal(n=6, "Greens")[-1], rev(brewer.pal(n=4, "Purples")[-1]), rev(brewer.pal(n=4, "Blues")[-1]), "black"))
 ggsave("new_figs/Rhizophages_PCoA_by_strain_Co2_Co3_min3.pdf", pcoa_D)
 
@@ -210,7 +217,8 @@ cps_gg_cent <- cps_gg %>%
   filter(score == "centroids")
 ggplot(data=cps_gg_sites, aes(x=CAP1, y=CAP2)) + 
   geom_point(aes(color=ANI95.OTU)) + 
-  theme_bw() + scale_color_brewer(palette="Spectral")
+  theme_bw() + scale_color_manual(values=c(brewer.pal(n=5, "Reds")[-1], brewer.pal(n=4, "Greens")[-1], rev(brewer.pal(n=5, "Blues")[-1])))
+
   #theme_bw() + 
   #scale_color_manual(values=c(brewer.pal(n=9, "Reds")[-1], brewer.pal(n=7, "YlOrRd")[-1], brewer.pal(n=6, "Greens")[-1], rev(brewer.pal(n=4, "Purples")[-1]), rev(brewer.pal(n=4, "Blues")[-1]), "black"))
 ggsave("new_figs/CAP_analysis_by_strain_min2.pdf")
@@ -218,13 +226,7 @@ ggsave("new_figs/CAP_analysis_by_strain_min2.pdf")
 # Creating the upset plot requires summing up coverage per country per virus, then converting the table to a presence/absence
 # table, just like a Jaccard matrix. The way to do that is to change every value >0 to 1.
 
-otu_t_2 <- otu %>% # Throw out samples (columns) that have no viruses
-  t() %>% #transpose the table
-  data.frame # turn it back from matrix to data frame
-
-otu_t_2[otu_t_2 > 0] <- 1 # Convert to presence/absence
-
-max.loc <- as.data.frame(otu_t_2) %>%
+max.loc <- as.data.frame(otu_t) %>%
   rownames_to_column(var="Run")
 
 # Reformat coverage and sum by country
@@ -267,7 +269,7 @@ upset(
   ),
   width_ratio=0.2
 )
-ggsave("new_figs/rhizophages_upset_complex_min2.pdf") # Note that Australia got thrown out, probably due to simple communities
+ggsave("new_figs/fig1_rhizophages_upset_complex_min2.pdf") # Note that Australia got thrown out, probably due to simple communities
 
 # Which vOTUs are very common (in  or more countries)
 max.loc[rowSums(max.loc[,-c(1, ncol(max.loc))]) >= 5,]
@@ -317,19 +319,14 @@ ggsave("new_figs/upset_by_Cicer_min2.pdf")
 # These vOTUs are no longer in the current list, hence they don't yield any results.
 blst <- read.delim("vOTUs_confirmed_10k_vs_pacbio_blast_minqcov90.tsv", sep="\t", header=F, stringsAsFactors = F)
 colnames(blst) <- c("qseqid","Refseq_accession","pident","qcovs","qstart","qend","sstart","send","length","evalue","bitscore","mismatch")
-pacbio <- read.csv("Greenlon_PNAS_supp/pnas.1900056116.sd07.csv", header=T) %>%
-  mutate(Refseq_accession = gsub("NZ_", "", Refseq_accession))
+pacbio <- read.csv("Greenlon_PNAS_supp/pnas.1900056116.sd07.csv", header=T)
 mrg <- pacbio %>%
   left_join(blst, by="Refseq_accession") %>%
   filter(!is.na(qseqid)) %>%
   filter(sstart >= sym.island.start) %>%
   filter(send <= sym.island.end)
 
-unique(mrg$qseqid)
-
-for (p in unique(mrg$qseqid)) {
-   print(max.loc[max.loc$variable %like% p,])
-}
+unique(mrg$qseqid) # No vOTUs are located in the symbiosis island
 
 # Identify AMGs in valid OTUs
 orgN <- read.delim("DRAM/Distill/metabolism_summary_orgN.csv", header=T, stringsAsFactors = F, sep=";")
@@ -475,8 +472,8 @@ perm.tidy <- rbind(mutate(ET.perm.tidy, Habitat = "Ethiopia"),
                    mutate(AU.perm.tidy, Habitat = "Australia"),
                    mutate(CA.perm.tidy, Habitat = "Canada"),
                    mutate(US.perm.tidy, Habitat = "USA")) %>% 
-  mutate(Habitat = fct_relevel(Habitat, "Ethiopia", "India", "Pakistan", "Turkey", 
-                               "Morocco", "Australia", "Canada", "USA")) 
+  mutate(Habitat = fct_relevel(Habitat, "Canada", "USA", "Turkey", "Morocco", 
+                               "Ethiopia", "India", "Pakistan", "Australia")) 
 richness <- rbind(mutate(ET.richness, Habitat = "Ethiopia"),
                   mutate(IN.richness, Habitat = "India"),
                   mutate(PK.richness, Habitat = "Pakistan"),
@@ -485,13 +482,13 @@ richness <- rbind(mutate(ET.richness, Habitat = "Ethiopia"),
                   mutate(AU.richness, Habitat = "Australia"),
                   mutate(CA.richness, Habitat = "Canada"),
                   mutate(US.richness, Habitat = "USA")) %>% 
-  mutate(Habitat = fct_relevel(Habitat, "Australia", "Canada", "USA", "Turkey", 
-                               "Morocco", "Ethiopia", "India", "Pakistan")) 
+  mutate(Habitat = fct_relevel(Habitat, "Canada", "USA", "Turkey", "Morocco", 
+                               "Ethiopia", "India", "Pakistan", "Australia")) 
 
 acc.p <- ggplot(perm.tidy, aes(Sites, Species, color = Habitat)) +
   geom_point(alpha = 0.2, size = 1) +
   geom_line(data = richness, size = 1) +
-  scale_color_brewer(12, palette = "Paired", direction=-1) +
+  scale_color_manual(values=c("#FDBF6F", "#E31A1C", "#FB9A99", "#33A02C", "#B2DF8A", "#1F78B4", "#A6CEE3", "#FF7F00")) +
   xlim(0,100) +
   ylab("Cumulative richness\n(# vOTUs)") +
   xlab("Sampling effort\n(# samples)") +
@@ -500,9 +497,31 @@ acc.p <- ggplot(perm.tidy, aes(Sites, Species, color = Habitat)) +
         legend.position = "top",
         panel.border = element_blank()) 
 acc.p
-ggsave("new_figs/rhizophage_accumulation_curves_min2.pdf", acc.p, width=8, height=6)
+acc.p.300 <- ggplot(perm.tidy, aes(Sites, Species, color = Habitat)) +
+  geom_point(alpha = 0.2, size = 1) +
+  geom_line(data = richness, size = 1) +
+  scale_color_manual(values=c("#FDBF6F", "#E31A1C", "#FB9A99", "#33A02C", "#B2DF8A", "#1F78B4", "#A6CEE3", "#FF7F00")) +
+  xlim(0,300) +
+  ylab("Cumulative richness\n(# vOTUs)") +
+  xlab("Sampling effort\n(# samples)") +
+  theme_light() +
+  theme(text = element_text(size = 12),
+        legend.position = "top",
+        panel.border = element_blank()) 
+ggarrange(acc.p, acc.p.300, ncol=1, nrow=2)
+ggsave("new_figs/sup_fig1_rhizophage_accumulation_curves_min2.pdf", width=6, height=10)
 
-# Viruses in plant metagenomes vs. MAGs
+# Are these curves logarithmic?
+summary(lm(PK.perm.tidy$Species ~ log10(PK.perm.tidy$Sites))) # slope p<2.2e-16, t=27, R2=0.4
+summary(lm(IN.perm.tidy$Species ~ log10(IN.perm.tidy$Sites))) # slope p<2.2e-16, t=560, R2=0.92
+summary(lm(ET.perm.tidy$Species ~ log10(ET.perm.tidy$Sites))) # slope p<2.2e-16, t=505, R2=0.9
+summary(lm(MR.perm.tidy$Species ~ log10(MR.perm.tidy$Sites))) # slope p<2.2e-16, t=194, R2=0.83
+summary(lm(TU.perm.tidy$Species ~ log10(TU.perm.tidy$Sites))) # slope p<2.2e-16, t=225, R2=0.84
+summary(lm(US.perm.tidy$Species ~ log10(US.perm.tidy$Sites))) # slope p<2.2e-16, t=115, R2=0.8
+summary(lm(CA.perm.tidy$Species ~ log10(CA.perm.tidy$Sites))) # slope p<2.2e-16, t=106, R2=0.68
+summary(lm(AU.perm.tidy$Species ~ log10(AU.perm.tidy$Sites))) # slope p=0.13, t=1.5, R2=0.5
+
+# Viruses in nodule (plant) metagenomes vs. Mesorhizobium isolates
 
 # Filter the vOTU table to sample that have a country assigned
 otu_t_valid <- otu_t %>%
@@ -510,22 +529,43 @@ otu_t_valid <- otu_t %>%
   left_join(iso_to_loc, by="Run")
 
 otu_t_valid <- otu_t_valid %>%
-  filter(Country.of.origin != "") %>% # Throwing out samples without strain specified
+  filter(Country.of.origin != "") %>% # Throwing out samples without country specified
   filter(!is.na(Country.of.origin)) %>%
   filter(!is.na(Run)) %>%
+  unique() %>%
+  remove_rownames() %>%
   column_to_rownames("Run")
 
-nrow(otu_t_valid[otu_t_valid$organism == "plant metagenome",]) # 114
-nrow(otu_t_valid[otu_t_valid$organism != "plant metagenome",]) # 42
+nrow(otu_t_valid[otu_t_valid$organism == "plant metagenome" & rowSums(otu_t_valid[,1:106]) > 0,]) # 414 nodule MGs
+nrow(otu_t_valid[otu_t_valid$organism != "plant metagenome" & rowSums(otu_t_valid[,1:106]),]) # 166 isolate genomes
 
+# Nodule metagenomes
 otu_t_valid_MG <- otu_t_valid %>%
   filter(organism == "plant metagenome")
+for_hist <- rowSums(otu_t_valid_MG[, which(colnames(otu_t_valid_MG) %like% "NZ")]) %>%
+  data.frame()
+colnames(for_hist)[1] <- "num_vOTUs"
+countries <- otu_t_valid_MG$Country.of.origin
+names(countries) <- rownames(otu_t_valid_MG)
+for_hist <- merge(for_hist, countries, by="row.names")
+colnames(for_hist)[3] <- "country"
+for_hist$country <- fct_relevel(for_hist$country, c("IN", "ET", "MR", "TU"))
+temp <- for_hist %>% group_by(num_vOTUs, country) %>% tally()
+ggplot(temp, aes(x = num_vOTUs, y = n, fill = country), binwidth=0) + 
+  geom_bar(stat="identity", color="black") + 
+  theme_classic() + ylab("Number of nodule metagenomes") + xlab("Number of vOTUs in sample") + 
+  scale_fill_manual(values = c(brewer.pal(5, "Paired"))[-1])
+median(for_hist$num_vOTUs) #1
+mean(for_hist$num_vOTUs) #2.25
 
+# Cultured Mesorhizobium
 otu_t_valid_Cul <- otu_t_valid %>%
   filter(organism != "plant metagenome")
 
 # Create the distance matrix using the Jaccard algorithm (just presence/absence, not caring how high the coverage is)
-pco_dist <- vegdist(otu_t_valid_MG[, which(colnames(otu_t_valid_MG) %like% "NZ")], method="jaccard")
+temp <- otu_t_valid_MG %>% select(starts_with("NZ"))
+temp <- temp[rowSums(temp) > 0,]
+pco_dist <- vegdist(temp, method="jaccard")
 
 pcoa_bray <- pcoa(pco_dist) # Creating the PCoA object
 jac_variances <- data.frame(pcoa_bray$values$Relative_eig) %>% # Calculating the coordinates of each sample on a multidimensional PCoA plot
@@ -589,6 +629,18 @@ pcoa_Cul_2 <- ggplot(pcoa_bray_df) + # Plot the PCoA
 ggsave("new_figs/rhizophages_PCoA_Cul_Co2_Co3_min2.pdf", pcoa_Cul_2)
 
 # ANOSIM
+otu_t_valid <- otu_t_2 %>%
+  rownames_to_column(var="Run") %>%
+  left_join(iso_to_loc, by="Run")
+
+otu_t_valid <- otu_t_valid %>%
+  filter(Country.of.origin != "") %>% # Throwing out samples without country specified
+  filter(!is.na(Country.of.origin)) %>%
+  filter(!is.na(Run)) %>%
+  unique() %>%
+  remove_rownames() %>%
+  column_to_rownames("Run")
+
 # By strain
 temp2 <- otu_t_valid[!is.na(otu_t_valid$ANI95.OTU) & otu_t_valid$ANI95.OTU != "",] # Throw out samples without a dominant Mesorhizobium strain
 com = temp2[,which(colnames(temp2) %like% "NZ_")] # Select only vOTU columns
@@ -618,7 +670,7 @@ ano = anosim(m_com, temp2$soil.genus, distance = "euclidean", permutations = 999
 p.adjust(c(0.001, 0.037, 0.16, 0.21), method="BH") # 0.004 0.074 0.21 0.21
 
 # Pairwise dissimilarities within and between Mesorhizobium strains
-temp2 <- otu_t_valid[!is.na(otu_t_valid$ANI95.OTU) & otu_t_valid$ANI95.OTU != "",]
+temp2 <- otu_t_valid[!is.na(otu_t_valid$ANI95_OTU) & (otu_t_valid$ANI95_OTU != ""),]
 com = temp2[,which(colnames(temp2) %like% "NZ_")]
 jac_dist <- vegdist(com, method="jaccard")
 df <- reshape2::melt(as.matrix(jac_dist), varnames = c("row", "col"))
@@ -629,9 +681,13 @@ df2 <- merge(df2, iso_to_loc[, c("Run", "ANI95.OTU")], by.x="col", by.y="Run")
 colnames(df2)[length(colnames(df2))] <- "col.strain"
 df2$grp[df2$row.strain == df2$col.strain] <- "within"
 df2$grp[df2$row.strain != df2$col.strain] <- "between"
-ggboxplot(data=df2, x="grp", y="value", fill="grp") + xlab("Comparison") + ylab("% dissimilarity")
-ggsave("new_figs/dissimilarity_boxplot.pdf")
+bet_wit <- ggboxplot(data=df2, x="grp", y="value", fill="grp") + xlab("Comparison") + ylab("% dissimilarity")
+ggsave("new_figs/dissimilarity_boxplot.pdf", bet_wit)
 wilcox.test(df2$value[df2$grp=="within"], df2$value[df2$grp=="between"], alternative="less")
+
+# Generate figure 2
+ggarrange(pcoa_A, bet_wit, pcoa_C, ncol=2, nrow=2, labels=c("A", "B", "C"))
+ggsave("new_figs/fig2_new_PCoA_boxplot.pdf")
 
 # Trying a Mantel test
 
@@ -711,6 +767,8 @@ otu_t_valid <- otu_t_valid %>%
   filter(Country.of.origin != "") %>% # Throwing out samples without strain specified
   filter(!is.na(Country.of.origin)) %>%
   filter(!is.na(Run)) %>%
+  unique() %>%
+  remove_rownames() %>%
   column_to_rownames("Run")
 colnames(otu_t_valid) <- gsub("\\.", "_", colnames(otu_t_valid))
 
@@ -733,7 +791,17 @@ ggsave("new_figs/common_vOTUs_Cicer_min2.pdf")
 
 # What was the dominant Mesorhizobium strain in samples these vOTUs identified in?
 ubiq_vOTU$variable
-unique(otu_t_valid$ANI95_OTU[otu_t_valid$NZ_RZTI01000059_1_Mesorhizobium_sp__M6A_T_Ce_TU_002_03_1_1_NODE_59_length_35292_cov_4_27456__whole_genome_shotgun_sequence_fragment_1 == 1])
+unique(otu_t_valid$ANI95_OTU[otu_t_valid$NZ_RZTI01000059_1_Mesorhizobium_sp__M6A_T_Ce_TU_002_03_1_1_NODE_59_length_35292_cov_4_27456__whole_genome_shotgun_sequence_fragment_1 == 1 & otu_t_valid$organism=="plant metagenome"])
 # 5A, 5B, 5D, 6A, 7A, 7B, 8A, 9A
-unique(otu_t_valid$ANI95_OTU[otu_t_valid$NZ_RZSU01000038_1_Mesorhizobium_sp__M5C_F_Cr_IN_023_01_1_1_NODE_38_length_58474_cov_4_93071__whole_genome_shotgun_sequence_fragment_1 == 1])
+unique(otu_t_valid$ANI95_OTU[otu_t_valid$NZ_RZSU01000038_1_Mesorhizobium_sp__M5C_F_Cr_IN_023_01_1_1_NODE_38_length_58474_cov_4_93071__whole_genome_shotgun_sequence_fragment_1 == 1 & otu_t_valid$organism=="plant metagenome"])
 # 1A, 2A, 5A, 5B, 5C, 5D, 5E, 7A, 8A, 9A
+
+# Create sup. table S1
+metasra <- scan(file="metasraused.txt", what=character())
+metasra <- data.frame(metasra)
+colnames(metasra)[1] <- "Run"
+metasra$Run <- gsub("\\.sra", "", metasra$Run)
+tblS1 <- left_join(metasra, iso_to_loc[, c("Run", "Country.of.origin", "organism")], by="Run")
+tblS1$hasPhage <- FALSE
+tblS1$hasPhage[tblS1$Run %in% rownames(otu_t_valid)] <- TRUE
+write.csv(tblS1, "sup_tbl_S1.csv", row.names = F)
