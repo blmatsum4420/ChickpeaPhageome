@@ -1,4 +1,4 @@
-# ChickpeaViralDynamics
+# ChickpeaPhageome
 Biogeographic and host signatures in viral communities of chickpea nodules
 
 Here we provide the R code and its input files used in the above manuscript.
